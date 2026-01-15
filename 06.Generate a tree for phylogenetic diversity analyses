@@ -1,0 +1,42 @@
+QIIME supports several phylogenetic diversity metrics, 
+including Faith’s Phylogenetic Diversity and weighted and unweighted UniFrac.
+In addition to counts of features per sample (i.e., the data in the FeatureTable[Frequency]
+QIIME 2 artifact), these metrics require a rooted phylogenetic tree relating the features to one another.
+This information will be stored in a Phylogeny[Rooted] QIIME 2 artifact.
+To generate a phylogenetic tree we will use align-to-tree-mafft-fasttree pipeline
+from the q2-phylogeny plugin.
+
+First, the pipeline uses the mafft program to perform a multiple sequence alignment of
+the sequences in our FeatureData[Sequence] to create a FeatureData[AlignedSequence] QIIME 2 artifact.
+Next, the pipeline masks (or filters) the alignment to remove positions that are highly variable.
+These positions are generally considered to add noise to a resulting phylogenetic tree. Following that,
+the pipeline applies FastTree to generate a phylogenetic tree from the masked alignment.
+The FastTree program creates an unrooted tree, so in the final step in this section midpoint
+rooting is applied to place  the root of the tree at the midpoint of the longest tip-to-tip distance in the unrooted tree.
+
+
+qiime phylogeny align-to-tree-mafft-fasttree \
+--i-sequences rep-seqs.qza \
+--o-alignment aligned-rep-seqs.qza \
+--o-masked-alignment masked-aligned-rep-seqs.qza \
+--o-tree unrooted-tree.qza \
+--o-rooted-tree rooted-tree.qza
+
+An important parameter that needs to be provided to this script is --p-sampling-depth,
+which is the even sampling (i.e. rarefaction) depth. Because most diversity metrics are
+sensitive to different sampling depths across different samples,
+this script will randomly subsample the counts from each sample to the value provided for
+this parameter. For example, if you provide --p-sampling-depth 500,
+this step will subsample the counts in each sample without replacement so
+that each sample in the resulting table has a total count of 500. If the total count
+for any sample(s) are smaller than this value, those samples will be dropped from the diversity
+analysis. Choosing this value is tricky. We recommend making your choice by reviewing the
+information presented in the table.qzv file that was created above. Choose a value that is as
+high as possible (so you retain more sequences per sample) while excluding as few samples as possible.
+
+qiime diversity alpha-rarefaction \
+--i-table table.qza \
+--i-phylogeny rooted-tree.qza \
+--p-max-depth 80000 (look into table.qzv > frequency per sample (79610) > median frequency ---> round it) \
+--m-metadata-file metadata_16S_adult.txt \
+--o-visualization alpha-rarefaction_80k.qzv

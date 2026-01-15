@@ -1,0 +1,32 @@
+download FeatureData[Sequence] silva-138-99-seqs.qza and FeatureData[Taxonomy] silva-138-99-tax.qza from https://docs.qiime2.org/2024.5/data-resources/ save in directory
+
+# Extract reads to V3-V4 region (replace with your actual primer sequences and amplicon length)
+qiime feature-classifier extract-reads \
+--verbose \
+--i-sequences silva-138-99-seqs.qza \
+--p-f-primer CCTACGGGNGGCWGCAG \
+--p-r-primer GACTACHVGGGTATCTAATCC \
+--p-trunc-len 0 \
+--o-reads silva-138-v3v4-seqs.qza
+
+# Train the classifier
+qiime feature-classifier fit-classifier-naive-bayes \
+  --i-reference-reads silva-138-v3v4-seqs.qza \
+  --i-reference-taxonomy silva-138-99-tax.qza \
+  --o-classifier silva-138-v3v4-tax.qza
+(Output: Uniform-Classifier)
+
+# Test the classifier
+qiime feature-classifier classify-sklearn \
+  --i-classifier silva-138-v3v4-tax.qza \
+  --i-reads silva-138-v3v4-seqs.qza \
+  --o-classification silva-138-99-tax.qza
+
+qiime metadata tabulate \
+  --m-input-file silva-138-99-tax.qza \
+  --o-visualization silva-138-99-tax.qzv
+
+qiime rescript filter-taxa \
+  --i-taxonomy taxonomy.qza \
+  --m-ids-to-keep-file trimmed-sequences.qza \
+  --o-filtered-taxonomy filtered-taxonomy.qza

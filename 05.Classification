@@ -1,0 +1,78 @@
+Classify reads by taxon using a fitted classifier.
+
+qiime feature-classifier classify-sklearn \
+--p-n-jobs 1 \
+--verbose \
+--i-reads FeatureData[Sequence]:rep-seqs.qza \
+--i-classifier TaxonomicClassifier \
+--o-classification rep-seqs-taxonomy.qza
+
+output ARTIFACT: FeatureData[Taxonomy]
+
+qiime metadata tabulate \
+--m-input-file trialtrained-taxonomy.qza \
+--o-visualization rep-seqs-taxonomy.qzv
+
+qiime taxa barplot \
+--i-table /Users/shirai/Desktop/gut-microbiota-analysis/250819_healthy-adult_qiime2-2024.5/table.qza \
+--i-taxonomy rep-seqs-taxonomy.qza \
+--m-metadata-file /Users/shirai/Desktop/gut-microbiota-analysis/250819_healthy-adult_qiime2-2024.5/metadata_16S_adult.txt \
+--o-visualization rep-seqs-taxa-bar-plots.qzv
+
+#Relative-abundance
+Collapse groups of features that have the same taxonomic assignment through
+  the specified level. The frequencies of all features will be summed when
+  they are collapsed.
+
+for i in {2..7}; do \
+qiime taxa collapse \
+--i-table ../table.qza \
+--i-taxonomy stooltrained-taxonomy.qza \
+--p-level $i \
+--o-collapsed-table rel-freqs-class-${i}.qza \
+;done
+
+for i in {2..7}; do \
+qiime feature-table relative-frequency \
+--i-table rel-freqs-class-${i}.qza \
+--o-relative-frequency-table rel-abundance-class-${i}.qza \
+;done
+
+for i in {2..7}; do \
+qiime metadata tabulate \
+--m-input-file rel-abundance-class-${i}.qza \
+--o-visualization rel-abundance-class-${i}.qzv \
+;done
+
+
+#ヒートマップ
+#このままだと多くの腸内細菌が反映されるため、フィルターをかける。以下は50%以上のサンプルに出現、占有率1%以上
+qiime feature-table filter-features-conditionally \
+--i-table rel-freqs-class-6.qza \
+--p-prevalence 0.5 \
+--p-abundance 0.01 \
+--o-filtered-table filtered-genus-preval0.5-abund0.01.qza
+
+qiime feature-table filter-features-conditionally \
+--i-table rel-freqs-class-2.qza \
+--p-prevalence 0.5 \
+--p-abundance 0.01 \
+--o-filtered-table filtered-phylum-preval0.5-abund0.01.qza
+
+#ヒートマップの作画
+qiime feature-table heatmap \
+--i-table filtered-genus-preval0.5-abund0.01.qza \
+--m-sample-metadata-file metadata_16S_adult.txt \
+--m-sample-metadata-column Group \
+--o-visualization heatmap_filtered-genus-pre0.5-abu0.01.qzv
+
+qiime feature-table heatmap \
+--i-table filtered-phylum-preval0.5-abund0.01.qza \
+--m-sample-metadata-file metadata_16S_adult.txt \
+--m-sample-metadata-column Group \
+--o-visualization heatmap_filtered-phylum-pre0.5-abu0.01.qzv
+
+qiime feature-table presence-absence \
+--i-table ../table.qza \
+--o-presence-absence-table presence-absence.qza
+

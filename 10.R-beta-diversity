@@ -1,0 +1,219 @@
+> library(vegan)
+Loading required package: permute
+This is vegan 2.7-2
+> library(ggplot2)
+> library(dplyr)
+> bray_curtis <- read.delim("~/Desktop/Healthy-adults-V3V4/sampling-depth-58000/exported-bray-curtis/distance-matrix.tsv", row.names = 1, check.names = FALSE)
+> bray_dist <- as.dist(as.matrix(bray_curtis))
+> metadata <- read.delim("~/Desktop/Healthy-adults-V3V4/sampling-depth-58000/exported-bray-curtis/metadata_16S_adult.txt", header = TRUE)
+> metadata <- metadata[metadata$SampleID %in% rownames(bray_curtis), ]
+> rownames(metadata) <- metadata$SampleID
+> metadata <- metadata[rownames(bray_curtis), ]
+> bray_pcoa <- cmdscale(bray_dist, eig = TRUE, k = 2)
+> pcoa_df <- as.data.frame(bray_pcoa$points)
+> colnames(pcoa_df) <- c("PC1", "PC2")
+> pcoa_df$SampleID <- rownames(pcoa_df)
+> pcoa_df <- left_join(pcoa_df, metadata, by = "SampleID")
+> var_explained <- round(100 * bray_pcoa$eig / sum(bray_pcoa$eig), 1)
+> ggplot(pcoa_df, aes(x = PC1, y = PC2, color = Group)) +
++   geom_point(size = 3, alpha = 0.8) +
++   theme_minimal() +
++   labs(
++     title = "PCoA (Bray-Curtis Distance)",
++     x = paste0("PC1 (", var_explained[1], "%)"),
++     y = paste0("PC2 (", var_explained[2], "%)")
++   ) +
++   theme(plot.title = element_text(hjust = 0.5))
+> + stat_ellipse(level = 0.95, linetype = 2, size = 0.8)
+Error in `+.gg`:
+! Cannot use `+` with a single argument.
+ℹ Did you accidentally put `+` on a new line?
+Run `rlang::last_trace()` to see where the error occurred.
+Warning message:
+Using `size` aesthetic for lines was deprecated in ggplot2 3.4.0.
+ℹ Please use `linewidth` instead.
+This warning is displayed once every 8 hours.
+Call `lifecycle::last_lifecycle_warnings()` to see where this warning was generated. 
+> ggplot(pcoa_df, aes(x = PC1, y = PC2, color = Group)) +
++   geom_point(size = 3, alpha = 0.8) +
++   theme_minimal() +
++   labs(
++     title = "PCoA (Bray-Curtis Distance)",
++     x = paste0("PC1 (", var_explained[1], "%)"),
++     y = paste0("PC2 (", var_explained[2], "%)")
++   ) +
++   theme(plot.title = element_text(hjust = 0.5)) + stat_ellipse(level = 0.95, linetype = 2, size = 0.8)
+> permanova <- adonis2(bray_dist ~ Group, data = metadata, permutations = 999)
+> print(permanova)
+Permutation test for adonis under reduced model
+Permutation: free
+Number of permutations: 999
+
+adonis2(formula = bray_dist ~ Group, data = metadata, permutations = 999)
+         Df SumOfSqs      R2      F Pr(>F)
+Model     1   0.0766 0.00683 0.2339      1
+Residual 34  11.1366 0.99317              
+Total    35  11.2132 1.00000              
+> dispersion <- betadisper(bray_dist, metadata$Group)
+> anova(dispersion)
+Analysis of Variance Table
+
+Response: Distances
+          Df   Sum Sq   Mean Sq F value Pr(>F)
+Groups     1 0.003586 0.0035858  0.6992 0.4089
+Residuals 34 0.174361 0.0051283               
+> ggsave("bray_curtis_pcoa.png", width = 6, height = 5, dpi = 600)
+> 
+
+
+🧪 Full R Code: UniFrac Beta Diversity Analysis
+
+We’ll walk through Unweighted UniFrac, and then note how to switch to Weighted.
+
+📁 Step 1: Load libraries
+library(vegan)
+library(ggplot2)
+library(dplyr)
+
+📄 Step 2: Load distance matrix and metadata
+# Load UniFrac distance matrix
+unifrac <- read.delim("~/Desktop/Healthy-adults-V3V4/sampling-depth-58000/beta-diversity/exported-unweighted-unifrac/distance-matrix.tsv", row.names = 1, check.names = FALSE)
+
+# Convert to distance object
+unifrac_dist <- as.dist(as.matrix(unifrac))
+
+# Load metadata
+metadata <- read.delim("~/Desktop/Healthy-adults-V3V4/sampling-depth-58000/shannon_vector_results/metadata_16S_adult.txt", header = TRUE)
+
+# Match metadata to distance matrix
+metadata <- metadata[metadata$SampleID %in% rownames(unifrac), ]
+rownames(metadata) <- metadata$SampleID
+metadata <- metadata[rownames(unifrac), ]
+
+📊 Step 3: Ordination (PCoA)
+unifrac_pcoa <- cmdscale(unifrac_dist, eig = TRUE, k = 2)
+
+pcoa_df <- as.data.frame(unifrac_pcoa$points)
+colnames(pcoa_df) <- c("PC1", "PC2")
+pcoa_df$SampleID <- rownames(pcoa_df)
+
+pcoa_df <- left_join(pcoa_df, metadata, by = "SampleID")
+
+📈 Step 4: Plot PCoA
+var_explained <- round(100 * unifrac_pcoa$eig / sum(unifrac_pcoa$eig), 1)
+
+ggplot(pcoa_df, aes(x = PC1, y = PC2, color = Group)) +
+  geom_point(size = 3, alpha = 0.8) +
+  stat_ellipse(level = 0.95, linetype = 2, size = 0.8) +
+  theme_minimal() +
+  labs(
+    title = "PCoA (Unweighted UniFrac Distance)",
+    x = paste0("PC1 (", var_explained[1], "%)"),
+    y = paste0("PC2 (", var_explained[2], "%)")
+  ) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+🧪 Step 5: PERMANOVA
+permanova <- adonis2(unifrac_dist ~ Group, data = metadata, permutations = 999)
+print(permanova)
+
+⚠️ Optional: Homogeneity of dispersion
+disp <- betadisper(unifrac_dist, metadata$Group)
+anova(disp)
+
+💾 Save Plot
+ggsave("unweighted_unifrac_pcoa.png", width = 6, height = 5, dpi = 300)
+
+
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(vegan)
+
+# ==========================
+# 1️⃣ Load metadata and distance matrix
+# ==========================
+
+# Metadata
+metadata <- read_tsv("metadata.tsv")
+
+# Distance matrix exported from QIIME2
+# Skip comment lines if present
+dist_mat <- read_tsv("distance-matrix.tsv", comment = "#")
+
+# Convert to data.frame and set rownames as sample IDs
+dist_mat_df <- as.data.frame(dist_mat)
+rownames(dist_mat_df) <- dist_mat_df[[1]]  # first column contains sample IDs
+dist_mat_df <- dist_mat_df[,-1]            # remove first column
+
+# Convert to matrix
+dist_mat_matrix <- as.matrix(dist_mat_df)
+
+# Check rownames match metadata
+all(rownames(dist_mat_matrix) %in% metadata$SampleID)  # should be TRUE
+
+# Reorder metadata to match distance matrix
+metadata_ordered <- metadata %>%
+  filter(SampleID %in% rownames(dist_mat_matrix)) %>%
+  arrange(match(SampleID, rownames(dist_mat_matrix)))
+
+# ==========================
+# 2️⃣ PCoA (Principal Coordinates Analysis)
+# ==========================
+pcoa_res <- cmdscale(dist_mat_matrix, eig = TRUE, k = 2)
+
+# Variance explained by PC1 and PC2
+eig_vals <- pcoa_res$eig
+var_explained <- eig_vals / sum(eig_vals[eig_vals > 0]) * 100
+pc1_text <- paste0("PC1 (", round(var_explained[1], 1), "%)")
+pc2_text <- paste0("PC2 (", round(var_explained[2], 1), "%)")
+
+# Create PCoA data frame
+pcoa_df <- data.frame(
+  SampleID = rownames(pcoa_res$points),
+  PC1 = pcoa_res$points[,1],
+  PC2 = pcoa_res$points[,2]
+)
+
+# Merge with ordered metadata
+pcoa_df <- merge(pcoa_df, metadata_ordered, by.x = "SampleID", by.y = "SampleID")
+
+# ==========================
+# 3️⃣ PERMANOVA test
+# ==========================
+adonis_res <- adonis2(dist_mat_matrix ~ Group, data = metadata_ordered, permutations = 999)
+print(adonis_res)
+
+# Extract p-value for plotting
+pval_text <- paste0("PERMANOVA p = ", signif(adonis_res$`Pr(>F)`[1], 3))
+
+# ==========================
+# 4️⃣ PCoA plot
+# ==========================
+p_beta <- ggplot(pcoa_df, aes(x = PC1, y = PC2, color = Group)) +
+  geom_point(size = 3, alpha = 0.8) +
+  stat_ellipse(aes(fill = Group), geom = "polygon", alpha = 0.2, color = NA) +
+  labs(
+    title = "PCoA (Beta Diversity)",
+    subtitle = pval_text,
+    x = pc1_text,
+    y = pc2_text
+  ) +
+  theme_bw(base_size = 12) +
+  scale_color_manual(values = c("Baseline"="#999999","AOS-4-weeks"="#0072B2")) +
+  scale_fill_manual(values = c("Baseline"="#999999","AOS-4-weeks"="#0072B2")) +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 12),
+    axis.text = element_text(size = 11)
+  )
+
+# Print plot
+print(p_beta)
+
+# ==========================
+# 5️⃣ Save figure
+# ==========================
+ggsave("beta_diversity_pcoa.png", plot = p_beta, width = 8, height = 6, dpi = 600)
+ggsave("beta_diversity_pcoa.pdf", plot = p_beta, width = 8, height = 6)

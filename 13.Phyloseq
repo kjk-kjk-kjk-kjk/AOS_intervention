@@ -1,0 +1,130 @@
+library(qiime2R)
+library(phyloseq)
+library(ggplot2)
+library(dplyr)
+
+# -----------------------
+# 1. Import data
+# -----------------------
+table_qza <- "~/Desktop/Healthy-adults-V3V4/table.qza"
+taxonomy_qza <- "~/Desktop/Healthy-adults-V3V4/v3v4-classification-result.qza"
+metadata_file <- "~/Desktop/Healthy-adults-V3V4/metadata_16S_adult copy.txt"
+tree_qza <- "~/Desktop/Healthy-adults-V3V4/rooted-tree.qza"
+
+otu_table_object <- read_qza(table_qza)$data
+taxonomy_object  <- read_qza(taxonomy_qza)$data
+tree_object      <- read_qza(tree_qza)$data
+
+taxonomy_split <- strsplit(as.character(taxonomy_object$Taxon), ";")
+taxonomy_mat <- do.call(rbind, lapply(taxonomy_split, function(x) {
+  length(x) <- 7
+  x
+}))
+colnames(taxonomy_mat) <- c("Kingdom", "Phylum", "Class", 
+                            "Order", "Family", "Genus", "Species")
+rownames(taxonomy_mat) <- taxonomy_object$Feature.ID
+taxonomy_object <- tax_table(as.matrix(taxonomy_mat))
+otu_table_object <- otu_table(as.matrix(otu_table_object), taxa_are_rows = TRUE)
+
+metadata <- read.table(metadata_file,
+                       header = TRUE, sep = "\t",
+                       row.names = 1, check.names = FALSE)
+rownames(metadata) <- trimws(rownames(metadata))
+
+# Match metadata and feature table samples
+common_samples <- intersect(colnames(otu_table_object), rownames(metadata))
+otu_table_object <- otu_table_object[, common_samples]
+metadata <- metadata[common_samples, ]
+
+# -----------------------
+# 2. Create phyloseq object
+# -----------------------
+ps <- phyloseq(
+  otu_table_object,
+  taxonomy_object,
+  sample_data(metadata),
+  phy_tree(tree_object)
+)
+
+# -----------------------
+# 3. Normalize to relative abundance
+# -----------------------
+ps <- transform_sample_counts(ps, function(x) x / sum(x))
+
+# -----------------------
+# 4. Order samples by group
+# -----------------------
+sample_data(ps)$Group <- factor(sample_data(ps)$Group,
+                                levels = c("Baseline", "AOS-4-weeks"))
+sample_order <- rownames(sample_data(ps))[order(sample_data(ps)$Group)]
+ps <- prune_samples(sample_order, ps)
+
+# -----------------------
+# 5. Convert to long format for ggplot
+# -----------------------
+df <- psmelt(ps)
+df$Group <- factor(df$Group, levels = c("Baseline", "AOS-4-weeks"))
+df$SampleID <- factor(df$Sample, 
+                      levels = df %>%
+                        distinct(Sample, Group) %>%
+                        arrange(Group, Sample) %>%
+                        pull(Sample))
+
+# -----------------------
+# 6. Plot with borders
+# -----------------------
+p <- ggplot(df, aes(x = SampleID, y = Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity", colour = "black", linewidth = 0.2) +  # bordered bars
+  theme_bw() +
+  labs(title = "Gut Microbiota Composition by Phylum (Relative Abundance)",
+       x = "Sample (ordered by Group)",
+       y = "Relative Abundance") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid = element_blank()) +
+  facet_grid(~Group, scales = "free_x", space = "free_x")
+
+# -----------------------
+# 7. Save high-res figure
+# -----------------------
+print(p)
+
+ggsave("gut_microbiota_phylum_bordered_relabund.png", p,
+       width = 12, height = 6, dpi = 600)
+
+ggsave("gut_microbiota_phylum_bordered_relabund.pdf", p,
+       width = 12, height = 6)
+
+
+
+
+LEFSe
+
+# Install once (if not yet)
+if (!requireNamespace("MicrobiomeMarker", quietly = TRUE)) {
+  remotes::install_github("yiluheihei/microbiomeMarker")
+}
+
+library(MicrobiomeMarker)
+library(phyloseq)
+
+# Assuming your normalized phyloseq object is `ps_relab`
+# Ensure the group variable exists:
+sample_variables(ps_relab)  # should include "Group"
+
+# Run LEfSe
+lefse_res <- run_lefse(
+  ps_relab,
+  class = "Group",
+  subclass = NULL,          # optional: e.g. gender or time
+  lda_cutoff = 2.0,         # typical threshold
+  norm = "CPM"              # normalization method
+)
+
+# View results
+head(marker_table(lefse_res))
+
+# Plot LDA scores
+plot_lefse(lefse_res, taxa_level = "Phylum")
+
+# Save plot
+ggsave("lefse_lda_phylum.png", width = 8, height = 5, dpi = 600)

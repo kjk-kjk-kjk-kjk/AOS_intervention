@@ -1,0 +1,56 @@
+To find the best data we will first conduct subsample paired sequences. This plugin is optional, it functions to generate a random
+subsample of paired-end sequences containing approximately the fraction of input sequences specified by the fraction parameter. The
+number of output samples will always be equal to the number of input samples, even if some of those samples contain no sequences after
+subsampling.
+Benefits of using subsample paired-end
+
+1. Reducing Computational Cost:
+Paired-end sequencing can generate massive amounts of data, which can be computationally intensive to analyze.
+Subsampling allows researchers to work with a smaller, more manageable subset of reads, significantly reducing processing time and memory requirements.
+
+2. Validating Analysis Pipelines:
+Subsampling can be used to test and validate the accuracy and efficiency of data analysis pipelines before running them on the full dataset.
+This is particularly useful for complex analyses like de novo assembly or variant calling.
+
+3. Creating Representative Datasets:
+In some cases, subsampling can help create a representative subset of reads that accurately reflects the overall characteristics of the original dataset.
+This can be useful for exploring data distribution, identifying potential biases, or creating training datasets for machine learning models.
+
+4. Balancing Read Depth:
+Subsampling can help balance the read depth across different regions or samples, especially when dealing with uneven coverage.
+This can lead to more accurate downstream analyses, such as variant calling or differential gene expression analysis. 
+
+Below is the command/function we used for our sample(s):
+---------------------------------------------------------------------------------------------------------------------------
+qiime demux subsample-paired \
+--i-sequences demux-paired-end.qza \
+--p-fraction 0.05 \
+--o-subsampled-sequences demux-subsample.qza
+
+qiime demux summarize \
+--i-data demux-subsample.qza \
+--o-visualization demux-subsample.qzv
+
+#DADA2 needs more than 20bp overlaps
+
+for i in {130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280}; do \
+qiime dada2 denoise-paired \
+--verbose \
+--p-n-threads 0 \
+--p-trim-left-f 15 \
+--p-trim-left-r 15 \
+--p-trunc-len-f $i \
+--p-trunc-len-r $i \
+--i-demultiplexed-seqs demux-subsample.qza \
+--o-table table_trunclen-${i}.qza \
+--o-representative-sequences rep-seqs_trunclen-${i}.qza \
+--o-denoising-stats stats-dada2_trunclen-${i}.qza \
+;done
+
+for i in {130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280}; do \
+qiime metadata tabulate \
+--m-input-file stats-dada2_trunclen-${i}.qza \
+--o-visualization stats-dada2_trunclen-${i}.qzv \
+;done
+
+We checked the stats-dada2_trunclen-${i}.qzv data one by one, and find the one with best non-chimeric percentage

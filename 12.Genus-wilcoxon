@@ -1,0 +1,214 @@
+############################################################
+# Agarooligosaccharide (AOS) intervention - Genus analysis
+# Using taxa collapse level 6 (genus level)
+# Significance criterion: p < 0.05 (no fold-change filter)
+############################################################
+
+# --- Step 1: Install/load packages ---
+required_packages <- c("tidyverse", "ggrepel", "ggpubr", "progress")
+for (pkg in required_packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install.packages(pkg, repos = "https://cloud.r-project.org")
+  }
+}
+
+library(tidyverse)
+library(ggrepel)
+library(ggpubr)
+library(progress)
+
+# --- Step 2: Load data ---
+genus <- read.delim("genus-abundance.tsv", header = TRUE, sep = "\t", check.names = FALSE)
+meta  <- read.delim("metadata_16S_adult.txt", header = TRUE, sep = "\t")
+
+# --- Step 3: Merge genus table with metadata ---
+merged <- merge(genus, meta, by = "SampleID")
+
+# --- Step 4: Split groups ---
+baseline <- merged %>% filter(Group == "Baseline")
+aos      <- merged %>% filter(Group == "AOS-4-weeks")
+
+# Check pairing
+stopifnot(all(sort(unique(baseline$Individiual)) == sort(unique(aos$Individiual))))
+
+# --- Step 5: Paired Wilcoxon test per genus ---
+genus_cols <- setdiff(colnames(genus), "SampleID")
+results <- data.frame(Genus = genus_cols, W = NA, p = NA)
+
+pb <- progress_bar$new(
+  format = "  Testing genera [:bar] :percent ETA: :eta",
+  total = length(genus_cols), clear = FALSE, width = 60
+)
+
+for (i in seq_along(genus_cols)) {
+  pb$tick()
+  g <- genus_cols[i]
+  before <- baseline[match(aos$Individiual, baseline$Individiual), g]
+  after  <- aos[, g]
+
+  if (all(is.na(before)) || all(is.na(after)) || sd(c(before, after)) == 0) next
+
+  test <- wilcox.test(before, after, paired = TRUE, exact = FALSE)
+  results$W[i] <- test$statistic
+  results$p[i] <- test$p.value
+}
+
+cat("\n✅ Wilcoxon tests complete!\n")
+
+# --- Step 6: Compute fold change (AOS / Baseline) ---
+fold_change <- sapply(genus_cols, function(x) {
+  mean(aos[[x]], na.rm = TRUE) / mean(baseline[[x]], na.rm = TRUE)
+})
+results$FoldChange <- fold_change
+results$log2FC <- log2(fold_change)
+
+# --- Step 7: Filter by p < 0.05 only ---
+sig_p <- results %>% filter(p < 0.05)
+
+cat("\nGenera with p < 0.05:", nrow(sig_p), "\n")
+
+# --- Step 8: Save results ---
+write.table(results, "all_genus_results.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
+write.table(sig_p, "significant_genus_p0.05.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
+
+# --- Step 9: Volcano plot ---
+results$Significance <- ifelse(results$p < 0.05 & results$log2FC > 0, "Up",
+                        ifelse(results$p < 0.05 & results$log2FC < 0, "Down", "NS"))
+
+volcano_plot <- ggplot(results, aes(x = log2FC, y = -log10(p), color = Significance)) +
+  geom_point(alpha = 0.7) +
+  scale_color_manual(values = c("Up" = "red", "Down" = "blue", "NS" = "grey70")) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dotted", color = "orange") +
+  geom_text_repel(
+    data = sig_p %>% top_n(10, wt = -log10(p)),
+    aes(label = Genus), size = 3
+  ) +
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "Differential genus abundance after AOS intervention",
+    subtitle = "Red = increased, Blue = decreased (p < 0.05)",
+    x = "log2 Fold Change (AOS / Baseline)",
+    y = "-log10(p)"
+  )
+
+ggsave("genus_volcano_plot_p0.05.png", volcano_plot, width = 8, height = 6)
+
+# --- Step 10: Done ---
+cat("\n✅ Analysis complete!\n")
+cat("Significant genera (p < 0.05):", nrow(sig_p), "\n")
+cat("Results saved as:\n",
+    " - all_genus_results.tsv\n",
+    " - significant_genus_p0.05.tsv\n",
+    " - genus_volcano_plot_p0.05.png\n")
+
+############################################################
+# Agarooligosaccharide (AOS) intervention - Species analysis
+# Using taxa collapse level 7 (species level)
+# Significance criterion: p < 0.05
+############################################################
+
+# --- Step 1: Install/load packages ---
+required_packages <- c("tidyverse", "ggrepel", "ggpubr", "progress")
+for (pkg in required_packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install.packages(pkg, repos = "https://cloud.r-project.org")
+  }
+}
+
+library(tidyverse)
+library(ggrepel)
+library(ggpubr)
+library(progress)
+
+# --- Step 2: Load data ---
+species <- read.delim("species-abundance.tsv", header = TRUE, sep = "\t", check.names = FALSE)
+meta    <- read.delim("metadata_16S_adult.txt", header = TRUE, sep = "\t")
+
+# --- Step 2.5: Simplify species names ---
+# Extract only species name (s__) if you want cleaner column names
+colnames(species)[-1] <- gsub(".*s__", "", colnames(species)[-1])
+
+# --- Step 3: Merge with metadata ---
+merged <- merge(species, meta, by = "SampleID")
+
+# --- Step 4: Split groups ---
+baseline <- merged %>% filter(Group == "Baseline")
+aos      <- merged %>% filter(Group == "AOS-4-weeks")
+
+# Check pairing
+stopifnot(all(sort(unique(baseline$Individiual)) == sort(unique(aos$Individiual))))
+
+# --- Step 5: Paired Wilcoxon test per species ---
+species_cols <- setdiff(colnames(species), "SampleID")
+results <- data.frame(Species = species_cols, W = NA, p = NA)
+
+pb <- progress_bar$new(
+  format = "  Testing species [:bar] :percent ETA: :eta",
+  total = length(species_cols), clear = FALSE, width = 60
+)
+
+for (i in seq_along(species_cols)) {
+  pb$tick()
+  s <- species_cols[i]
+  before <- baseline[match(aos$Individiual, baseline$Individiual), s]
+  after  <- aos[, s]
+
+  if (all(is.na(before)) || all(is.na(after)) || sd(c(before, after)) == 0) next
+
+  test <- wilcox.test(before, after, paired = TRUE, exact = FALSE)
+  results$W[i] <- test$statistic
+  results$p[i] <- test$p.value
+}
+
+cat("\n✅ Wilcoxon tests complete!\n")
+
+# --- Step 6: Compute fold change (AOS / Baseline) ---
+fold_change <- sapply(species_cols, function(x) {
+  mean(aos[[x]], na.rm = TRUE) / mean(baseline[[x]], na.rm = TRUE)
+})
+results$FoldChange <- fold_change
+results$log2FC <- log2(fold_change)
+
+# --- Step 7: Filter by p < 0.05 ---
+sig_p <- results %>% filter(p < 0.05)
+
+cat("\nSpecies with p < 0.05:", nrow(sig_p), "\n")
+
+# --- Step 8: Save results ---
+write.table(results, "all_species_results.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
+write.table(sig_p, "significant_species_p0.05.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
+
+# --- Step 9: Volcano plot ---
+results$Significance <- ifelse(results$p < 0.05 & results$log2FC > 0, "Up",
+                        ifelse(results$p < 0.05 & results$log2FC < 0, "Down", "NS"))
+
+volcano_plot <- ggplot(results, aes(x = log2FC, y = -log10(p), color = Significance)) +
+  geom_point(alpha = 0.7) +
+  scale_color_manual(values = c("Up" = "red", "Down" = "blue", "NS" = "grey70")) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dotted", color = "orange") +
+  geom_text_repel(
+    data = sig_p %>% top_n(10, wt = -log10(p)),
+    aes(label = Species), size = 3
+  ) +
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "Differential species abundance after AOS intervention",
+    subtitle = "Red = increased, Blue = decreased (p < 0.05)",
+    x = "log2 Fold Change (AOS / Baseline)",
+    y = "-log10(p)"
+  )
+
+ggsave("species_volcano_plot_p0.05.png", volcano_plot, width = 8, height = 6)
+
+# --- Step 10: Done ---
+cat("\n✅ Analysis complete!\n")
+cat("Significant species (p < 0.05):", nrow(sig_p), "\n")
+cat("Results saved as:\n",
+    " - all_species_results.tsv\n",
+    " - significant_species_p0.05.tsv\n",
+    " - species_volcano_plot_p0.05.png\n")
+
+browseURL(getwd())
+

@@ -1,0 +1,100 @@
+# === 1. Load packages ===
+library(tidyverse)
+library(ggpubr)
+library(viridis)
+library(scales)
+
+# === 2. Load data ===
+abund <- read.delim("~/Desktop/Genus-abundance.tsv", check.names = FALSE)
+meta  <- read.delim("~/Desktop/metadata.tsv", check.names = FALSE)
+
+# === 3. Keep only SampleID + numeric genus columns ===
+abund_clean <- abund %>%
+  select(SampleID, where(is.numeric))
+
+# === 4. Merge metadata and abundance ===
+merged <- left_join(meta, abund_clean, by = "SampleID")
+
+# === 5. Pivot longer only numeric columns ===
+rel_long <- merged %>%
+  pivot_longer(
+    cols = where(is.numeric),
+    names_to = "Genus",
+    values_to = "Abundance"
+  )
+
+# === 6. Shorten genus names (keep only last part after "g__") ===
+rel_long <- rel_long %>%
+  mutate(Genus = ifelse(grepl("g__", Genus),
+                        sub(".*g__", "", Genus),
+                        Genus))
+
+# === 7. Keep only genera with mean abundance >= 1% ===
+genus_mean <- rel_long %>%
+  group_by(Genus) %>%
+  summarise(mean_abund = mean(Abundance), .groups = "drop") %>%
+  filter(mean_abund >= 0.01)
+
+rel_long <- rel_long %>%
+  filter(Genus %in% genus_mean$Genus)
+
+# === 8. Wilcoxon paired test per genus ===
+wilcox_results <- rel_long %>%
+  group_by(Genus) %>%
+  summarise(
+    p_value = tryCatch(
+      suppressWarnings(
+        wilcox.test(
+          Abundance[Group == "Baseline"],
+          Abundance[Group == "AOS-4-weeks"],
+          paired = TRUE
+        )$p.value
+      ),
+      error = function(e) NA
+    )
+  ) %>%
+  mutate(p_adj = p.adjust(p_value, method = "fdr"))
+
+# === 9. Order genera by overall mean abundance ascending (lowest on top) ===
+genus_order <- rel_long %>%
+  group_by(Genus) %>%
+  summarise(mean_abund = mean(Abundance), .groups = "drop") %>%
+  arrange(mean_abund) %>%  # lowest mean first
+  pull(Genus)
+
+# Merge p-values for plotting
+plot_data <- left_join(rel_long, wilcox_results, by = "Genus")
+
+# === 10. Plot horizontal boxplot with log10 y-axis (simple -4 to 0 labels) ===
+ggplot(plot_data, aes(x = factor(Genus, levels = genus_order),
+                      y = Abundance,
+                      fill = Group)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.85,
+               position = position_dodge(width = 0.8)) +
+  geom_jitter(position = position_jitterdodge(jitter.width = 0.1),
+              alpha = 0.4, size = 1) +
+  coord_flip() +
+  scale_y_log10(
+    limits = c(1e-5, 1),
+    breaks = 10^seq(-5, 3, by=1),
+    labels = c(-5, -4, -3, -2, -1, 0, 1, 2, 3)
+  ) +
+  scale_fill_manual(values = c("Baseline" = "#00BFC4",
+                               "AOS-4-weeks" = "#F8766D")) +
+  labs(
+    x = "Genus",
+    y = "Relative Abundance (log10)",
+    fill = NULL
+  ) +
+  theme_bw(base_size = 12) +
+  theme(
+    axis.text.y = element_text(face = "italic"),
+    legend.position = "top"
+  ) +
+  stat_compare_means(
+    aes(label = ifelse(p_adj < 0.05, "*", "")),
+    method = "wilcox.test",
+    paired = TRUE,
+    hide.ns = TRUE,
+    label.x = 1.05
+  )

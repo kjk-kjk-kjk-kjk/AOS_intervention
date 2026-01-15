@@ -1,0 +1,505 @@
+library(tidyverse)
+> library(ggpubr)
+> alpha_div <- read.delim("~/Desktop/Healthy-adults-V3V4/解析/alpha_div_with_evenness.tsv", check.names = FALSE)
+> meta <- read.delim("~/Desktop/Healthy-adults-V3V4/metadata_16S_adult copy.txt", check.names = FALSE)
+> alpha_div_merged <- alpha_div %>%
++   left_join(metadata, by = "SampleID")
+> alpha_div_merged <- alpha_div_merged %>%
++   mutate(
++     Shannon = as.numeric(Shannon),
++     Simpson = as.numeric(Simpson),
++     chao1 = as.numeric(chao1),
++     Evenness = as.numeric(Evenness),
++     Group = factor(Group, levels = c("Baseline", "AOS-4-weeks"))
++   )
+Error in `mutate()`:
+ℹ In argument: `chao1 = as.numeric(chao1)`.
+Caused by error:
+! 'list' object cannot be coerced to type 'double'
+Run `rlang::last_trace()` to see where the error occurred.
+> alpha_div_merged <- alpha_div_merged %>%
++   mutate(
++     Shannon = as.numeric(Shannon),
++     Simpson = as.numeric(Simpson),
++     Chao1 = as.numeric(Chao1),
++     Evenness = as.numeric(Evenness),
++     Group = factor(Group, levels = c("Baseline", "AOS-4-weeks"))
++   )
+> alpha_long <- alpha_div_merged %>%
++   pivot_longer(
++     cols = c(Shannon, Simpson, chao1, Evenness),
++     names_to = "Metric",
++     values_to = "Value"
++   ) %>%
++   mutate(
++     Metric = factor(
++       Metric,
++       levels = c("Shannon", "Simpson", "chao1", "Evenness"),
++       labels = c("Shannon Index", "Simpson’s Index", "Species Richness", "Species Evenness")
++     )
++   )
+Error in `pivot_longer()`:
+! Can't select columns with `chao1`.
+✖ `chao1` must be numeric or character, not a <spec_tbl_df/tbl_df/tbl/data.frame> object.
+Run `rlang::last_trace()` to see where the error occurred.
+Warning message:
+Using an external vector in selections was deprecated in tidyselect 1.1.0.
+ℹ Please use `all_of()` or `any_of()` instead.
+  # Was:
+  data %>% select(chao1)
+
+  # Now:
+  data %>% select(all_of(chao1))
+
+See <https://tidyselect.r-lib.org/reference/faq-external-vector.html>.
+This warning is displayed once every 8 hours.
+Call `lifecycle::last_lifecycle_warnings()` to see where this warning was generated. 
+> 
+> alpha_long <- alpha_div_merged %>%
++   pivot_longer(
++     cols = c(Shannon, Simpson, Chao1, Evenness),
++     names_to = "Metric",
++     values_to = "Value"
++   ) %>%
++   mutate(
++     Metric = factor(
++       Metric,
++       levels = c("Shannon", "Simpson", "Chao1", "Evenness"),
++       labels = c("Shannon Index", "Simpson’s Index", "Species Richness", "Species Evenness")
++     )
++   )
+> p_alpha <- ggplot(alpha_long, aes(x = Group, y = Value, fill = Group)) +
++   geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.6) +
++   geom_jitter(aes(color = Group), width = 0.1, size = 1, alpha = 0.8) +
++   scale_fill_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   scale_color_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   stat_compare_means(
++     aes(label = paste0("p = ", ..p.format..)),
++     method = "wilcox.test",
++     paired = TRUE,
++     label.y.npc = 0.95,   # auto position near top
++     size = 3
++   ) +
++   facet_wrap(~Metric, scales = "free_y", nrow = 1) +
++   labs(
++     title = "Alpha Diversity Indices (Paired Wilcoxon Test)",
++     x = "",
++     y = "Diversity Index"
++   ) +
++   theme_bw(base_size = 11) +
++   theme(
++     legend.position = "none",
++     strip.background = element_rect(fill = "white"),
++     strip.text = element_text(size = 10, face = "bold"),
++     panel.grid.major.x = element_blank(),
++     panel.grid.minor.x = element_blank(),
++     axis.text.x = element_text(angle = 0, vjust = 0.5)
++   )
+> 
+> # 6️⃣ Print
+> print(p_alpha)
+> p_alpha <- ggplot(alpha_long, aes(x = Group, y = Value, fill = Group)) +
++   geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.6) +
++   geom_jitter(aes(color = Group), width = 0.1, size = 1, alpha = 0.8) +
++   scale_fill_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   scale_color_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   stat_compare_means(
++     method = "wilcox.test",
++     paired = TRUE,
++     label = "p.signif",        # ⭐ show significance stars instead of p-value
++     label.y.npc = 0.95,
++     size = 4
++   ) +
++   facet_wrap(~Metric, scales = "free_y", nrow = 1) +
++   labs(
++     title = "Alpha Diversity Indices (Paired Wilcoxon Test)",
++     x = "",
++     y = "Diversity Index"
++   ) +
++   theme_bw(base_size = 11) +
++   theme(
++     legend.position = "none",
++     strip.background = element_rect(fill = "white"),
++     strip.text = element_text(size = 10, face = "bold"),
++     panel.grid.major.x = element_blank(),
++     panel.grid.minor.x = element_blank(),
++     axis.text.x = element_text(angle = 0, vjust = 0.5)
++   )
+> 
+> print(p_alpha)
+> p_alpha <- ggplot(alpha_long, aes(x = Group, y = Value, fill = Group)) +
++   geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.6) +
++   geom_jitter(aes(color = Group), width = 0.1, size = 1, alpha = 0.8) +
++   scale_fill_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   scale_color_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   stat_compare_means(
++     method = "wilcox.test",
++     paired = TRUE,
++     label = "p.signif",         # show significance stars
++     label.y.npc = 0.95,         # near top of each facet
++     size = 6,                   # ⭐ make label bigger
++     vjust = 0.5,                # vertically center text
++     hjust = 0.5                 # horizontally center text
++   ) +
++   facet_wrap(~Metric, scales = "free_y", nrow = 1) +
++   labs(
++     title = "",
++     x = "",
++     y = "Diversity Index"
++   ) +
++   theme_bw(base_size = 11) +
++   theme(
++     legend.position = "none",
++     strip.background = element_rect(fill = "white"),
++     strip.text = element_text(size = 10, face = "bold"),
++     panel.grid.major.x = element_blank(),
++     panel.grid.minor.x = element_blank(),
++     axis.text.x = element_text(angle = 0, vjust = 0.5)
++   )
+> 
+> print(p_alpha)
+> p_alpha <- ggplot(alpha_long, aes(x = Group, y = Value, fill = Group)) +
++   geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.6) +
++   geom_jitter(aes(color = Group), width = 0.1, size = 1, alpha = 0.8) +
++   scale_fill_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   scale_color_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   stat_compare_means(
++     method = "wilcox.test",
++     paired = TRUE,
++     label = "p.signif",         # show significance stars
++     label.y.npc = 0.95,         # near top of each facet
++     size = 6,                   # ⭐ make label bigger
++     vjust = 0.5,                # vertically center text
++     hjust = 0.8                 # horizontally center text
++   ) +
++   facet_wrap(~Metric, scales = "free_y", nrow = 1) +
++   labs(
++     title = "",
++     x = "",
++     y = "Diversity Index"
++   ) +
++   theme_bw(base_size = 11) +
++   theme(
++     legend.position = "none",
++     strip.background = element_rect(fill = "white"),
++     strip.text = element_text(size = 10, face = "bold"),
++     panel.grid.major.x = element_blank(),
++     panel.grid.minor.x = element_blank(),
++     axis.text.x = element_text(angle = 0, vjust = 0.5)
++   )
+> 
+> print(p_alpha)
+> p_alpha <- ggplot(alpha_long, aes(x = Group, y = Value, fill = Group)) +
++   geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.6) +
++   geom_jitter(aes(color = Group), width = 0.1, size = 1, alpha = 0.8) +
++   scale_fill_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   scale_color_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   stat_compare_means(
++     method = "wilcox.test",
++     paired = TRUE,
++     label = "p.signif",         # show significance stars
++     label.y.npc = 0.95,         # near top of each facet
++     size = 6,                   # ⭐ make label bigger
++     vjust = 0.5,                # vertically center text
++     hjust = 0.2                 # horizontally center text
++   ) +
++   facet_wrap(~Metric, scales = "free_y", nrow = 1) +
++   labs(
++     title = "",
++     x = "",
++     y = "Diversity Index"
++   ) +
++   theme_bw(base_size = 11) +
++   theme(
++     legend.position = "none",
++     strip.background = element_rect(fill = "white"),
++     strip.text = element_text(size = 10, face = "bold"),
++     panel.grid.major.x = element_blank(),
++     panel.grid.minor.x = element_blank(),
++     axis.text.x = element_text(angle = 0, vjust = 0.5)
++   )
+> 
+> print(p_alpha)
+> p_alpha <- ggplot(alpha_long, aes(x = Group, y = Value, fill = Group)) +
++   geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.6) +
++   geom_jitter(aes(color = Group), width = 0.1, size = 1, alpha = 0.8) +
++   scale_fill_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   scale_color_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   stat_compare_means(
++     method = "wilcox.test",
++     paired = TRUE,
++     label = "p.signif",         # show significance stars
++     label.y.npc = 0.95,         # near top of each facet
++     size = 6,                   # ⭐ make label bigger
++     vjust = 0.5,                # vertically center text
++     hjust = -0.2                 # horizontally center text
++   ) +
++   facet_wrap(~Metric, scales = "free_y", nrow = 1) +
++   labs(
++     title = "",
++     x = "",
++     y = "Diversity Index"
++   ) +
++   theme_bw(base_size = 11) +
++   theme(
++     legend.position = "none",
++     strip.background = element_rect(fill = "white"),
++     strip.text = element_text(size = 10, face = "bold"),
++     panel.grid.major.x = element_blank(),
++     panel.grid.minor.x = element_blank(),
++     axis.text.x = element_text(angle = 0, vjust = 0.5)
++   )
+> 
+> print(p_alpha)
+> p_alpha <- ggplot(alpha_long, aes(x = Group, y = Value, fill = Group)) +
++   geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.6) +
++   geom_jitter(aes(color = Group), width = 0.1, size = 1, alpha = 0.8) +
++   scale_fill_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   scale_color_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   stat_compare_means(
++     method = "wilcox.test",
++     paired = TRUE,
++     label = "p.signif",         # show significance stars
++     label.y.npc = 0.95,         # near top of each facet
++     size = 6,                   # ⭐ make label bigger
++     vjust = 0.5,                # vertically center text
++     hjust = -1                 # horizontally center text
++   ) +
++   facet_wrap(~Metric, scales = "free_y", nrow = 1) +
++   labs(
++     title = "",
++     x = "",
++     y = "Diversity Index"
++   ) +
++   theme_bw(base_size = 11) +
++   theme(
++     legend.position = "none",
++     strip.background = element_rect(fill = "white"),
++     strip.text = element_text(size = 10, face = "bold"),
++     panel.grid.major.x = element_blank(),
++     panel.grid.minor.x = element_blank(),
++     axis.text.x = element_text(angle = 0, vjust = 0.5)
++   )
+> 
+> print(p_alpha)
+> p_alpha <- ggplot(alpha_long, aes(x = Group, y = Value, fill = Group)) +
++   geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.6) +
++   geom_jitter(aes(color = Group), width = 0.1, size = 1, alpha = 0.8) +
++   scale_fill_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   scale_color_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   stat_compare_means(
++     method = "wilcox.test",
++     paired = TRUE,
++     label = "p.signif",         # show significance stars
++     label.y.npc = 0.95,         # near top of each facet
++     size = 6,                   # ⭐ make label bigger
++     vjust = 0.1,                # vertically center text
++     hjust = -1                 # horizontally center text
++   ) +
++   facet_wrap(~Metric, scales = "free_y", nrow = 1) +
++   labs(
++     title = "",
++     x = "",
++     y = "Diversity Index"
++   ) +
++   theme_bw(base_size = 11) +
++   theme(
++     legend.position = "none",
++     strip.background = element_rect(fill = "white"),
++     strip.text = element_text(size = 10, face = "bold"),
++     panel.grid.major.x = element_blank(),
++     panel.grid.minor.x = element_blank(),
++     axis.text.x = element_text(angle = 0, vjust = 0.5)
++   )
+> 
+> print(p_alpha)
+> p_alpha <- ggplot(alpha_long, aes(x = Group, y = Value, fill = Group)) +
++   geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.6) +
++   geom_jitter(aes(color = Group), width = 0.1, size = 1, alpha = 0.8) +
++   scale_fill_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   scale_color_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   stat_compare_means(
++     method = "wilcox.test",
++     paired = TRUE,
++     label = "p.signif",         # show significance stars
++     label.y.npc = 0.95,         # near top of each facet
++     size = 6,                   # ⭐ make label bigger
++     vjust = -1,                # vertically center text
++     hjust = -1                 # horizontally center text
++   ) +
++   facet_wrap(~Metric, scales = "free_y", nrow = 1) +
++   labs(
++     title = "",
++     x = "",
++     y = "Diversity Index"
++   ) +
++   theme_bw(base_size = 11) +
++   theme(
++     legend.position = "none",
++     strip.background = element_rect(fill = "white"),
++     strip.text = element_text(size = 10, face = "bold"),
++     panel.grid.major.x = element_blank(),
++     panel.grid.minor.x = element_blank(),
++     axis.text.x = element_text(angle = 0, vjust = 0.5)
++   )
+> 
+> print(p_alpha)
+> p_alpha <- ggplot(alpha_long, aes(x = Group, y = Value, fill = Group)) +
++   geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.6) +
++   geom_jitter(aes(color = Group), width = 0.1, size = 1, alpha = 0.8) +
++   scale_fill_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   scale_color_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   stat_compare_means(
++     method = "wilcox.test",
++     paired = TRUE,
++     label = "p.signif",         # show significance stars
++     label.y.npc = 0.95,         # near top of each facet
++     size = 6,                   # ⭐ make label bigger
++     vjust = -2,                # vertically center text
++     hjust = -1                 # horizontally center text
++   ) +
++   facet_wrap(~Metric, scales = "free_y", nrow = 1) +
++   labs(
++     title = "",
++     x = "",
++     y = "Diversity Index"
++   ) +
++   theme_bw(base_size = 11) +
++   theme(
++     legend.position = "none",
++     strip.background = element_rect(fill = "white"),
++     strip.text = element_text(size = 10, face = "bold"),
++     panel.grid.major.x = element_blank(),
++     panel.grid.minor.x = element_blank(),
++     axis.text.x = element_text(angle = 0, vjust = 0.5)
++   )
+> 
+> print(p_alpha)
+> p_alpha <- ggplot(alpha_long, aes(x = Group, y = Value, fill = Group)) +
++   geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.6) +
++   geom_jitter(aes(color = Group), width = 0.1, size = 1, alpha = 0.8) +
++   scale_fill_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   scale_color_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   stat_compare_means(
++     method = "wilcox.test",
++     paired = TRUE,
++     label = "p.signif",         # show significance stars
++     label.y.npc = 0.95,         # near top of each facet
++     size = 8,                   # ⭐ make label bigger
++     vjust = -2,                # vertically center text
++     hjust = -1                 # horizontally center text
++   ) +
++   facet_wrap(~Metric, scales = "free_y", nrow = 1) +
++   labs(
++     title = "",
++     x = "",
++     y = "Diversity Index"
++   ) +
++   theme_bw(base_size = 11) +
++   theme(
++     legend.position = "none",
++     strip.background = element_rect(fill = "white"),
++     strip.text = element_text(size = 10, face = "bold"),
++     panel.grid.major.x = element_blank(),
++     panel.grid.minor.x = element_blank(),
++     axis.text.x = element_text(angle = 0, vjust = 0.5)
++   )
+> 
+> print(p_alpha)
+> p_alpha <- ggplot(alpha_long, aes(x = Group, y = Value, fill = Group)) +
++   geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.6) +
++   geom_jitter(aes(color = Group), width = 0.1, size = 1, alpha = 0.8) +
++   scale_fill_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   scale_color_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   stat_compare_means(
++     method = "wilcox.test",
++     paired = TRUE,
++     label = "p.signif",         # show significance stars
++     label.y.npc = 0.95,         # near top of each facet
++     size = 8,                   # ⭐ make label bigger
++     vjust = -1,                # vertically center text
++     hjust = -1                 # horizontally center text
++   ) +
++   facet_wrap(~Metric, scales = "free_y", nrow = 1) +
++   labs(
++     title = "",
++     x = "",
++     y = "Diversity Index"
++   ) +
++   theme_bw(base_size = 11) +
++   theme(
++     legend.position = "none",
++     strip.background = element_rect(fill = "white"),
++     strip.text = element_text(size = 10, face = "bold"),
++     panel.grid.major.x = element_blank(),
++     panel.grid.minor.x = element_blank(),
++     axis.text.x = element_text(angle = 0, vjust = 0.5)
++   )
+> 
+> print(p_alpha)
+> p_alpha <- ggplot(alpha_long, aes(x = Group, y = Value, fill = Group)) +
++   geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.6) +
++   geom_jitter(aes(color = Group), width = 0.1, size = 1, alpha = 0.8) +
++   scale_fill_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   scale_color_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   stat_compare_means(
++     method = "wilcox.test",
++     paired = TRUE,
++     label = "p.signif",         # show significance stars
++     label.y.npc = 0.95,         # near top of each facet
++     size = 7,                   # ⭐ make label bigger
++     vjust = -1,                # vertically center text
++     hjust = -1                 # horizontally center text
++   ) +
++   facet_wrap(~Metric, scales = "free_y", nrow = 1) +
++   labs(
++     title = "",
++     x = "",
++     y = "Diversity Index"
++   ) +
++   theme_bw(base_size = 11) +
++   theme(
++     legend.position = "none",
++     strip.background = element_rect(fill = "white"),
++     strip.text = element_text(size = 10, face = "bold"),
++     panel.grid.major.x = element_blank(),
++     panel.grid.minor.x = element_blank(),
++     axis.text.x = element_text(angle = 0, vjust = 0.5)
++   )
+> 
+> print(p_alpha)
+> p_alpha <- ggplot(alpha_long, aes(x = Group, y = Value, fill = Group)) +
++   geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.6) +
++   geom_jitter(aes(color = Group), width = 0.1, size = 1, alpha = 0.8) +
++   scale_fill_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   scale_color_manual(values = c("Baseline" = "#999999", "AOS-4-weeks" = "#0072B2")) +
++   stat_compare_means(
++     method = "wilcox.test",
++     paired = TRUE,
++     label = "p.signif",         # show significance stars
++     label.y.npc = 0.95,         # near top of each facet
++     size = 7,                   # ⭐ make label bigger
++     vjust = -1,                # vertically center text
++     hjust = -1                 # horizontally center text
++   ) +
++   facet_wrap(~Metric, scales = "free_y", nrow = 1) +
++   labs(
++     title = "",
++     x = "",
++     y = "Diversity Index"
++   ) +
++   theme_bw(base_size = 11) +
++   theme(
++     legend.position = "none",
++     strip.background = element_rect(fill = "white"),
++     strip.text = element_text(size = 10, face = "bold"),
++     panel.grid.major.x = element_blank(),
++     panel.grid.minor.x = element_blank(),
++     axis.text.x = element_text(angle = 0, vjust = 0.5)
++   )
+> 
+> print(p_alpha)
+> ggsave("~/Desktop/Healthy-adults-V3V4/解析/alpha-div-4-metrics.png", plot = p_alpha, width = 10, height = 4, dpi = 600)
+> ggsave("~/Desktop/Healthy-adults-V3V4/解析/alpha-div-4-metrics.png", plot = p_alpha, width = 10, height = 10, dpi = 600)
+> ggsave("~/Desktop/Healthy-adults-V3V4/解析/alpha-div-4-metrics.png", plot = p_alpha, width = 10, height = 8, dpi = 600)
+> 

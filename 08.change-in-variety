@@ -1,0 +1,35 @@
+#変動菌株の検出
+
+qiime feature-table filter-samples \
+--i-table ../table.qza \
+--m-metadata-file ../metadata_16S.txt \
+--p-where "[Group] IN ('Baseline','AOS-4-weeks')" \
+--o-filtered-table table_change_variety.qza
+
+#Feature表を対象の分類階層に分解
+qiime taxa collapse \
+--i-table table_change_variety.qza \
+--i-taxonomy ../human-stool-weighted-taxonomy.qza \
+--p-level 6 \
+--o-collapsed-table table_genus_collapse.qza
+
+#ANCOM
+
+qiime composition add-pseudocount \
+--i-table table_genus_collapse.qza \
+--o-composition-table comp_table_genus_collapse.qza
+
+qiime composition ancom \
+--i-table comp_table_genus_collapse.qza \
+--m-metadata-file metadata_16S_adult.txt \
+--m-metadata-column Group \
+--o-visualization ancom_table_genus_collapse.qzv
+
+#結果の確認
+・X軸は2群の占有率の差を有心対数比変換で表した値、Y軸は検定統計量のW値
+
+
+#memo
+SVG形式の画像ファイルはinkscapeで編集可能
+
+Rのパッケージqiime2Rを用いてqiime2の結果をさらに解析できる(phyloseqによるDADA2処理後の統計解析）

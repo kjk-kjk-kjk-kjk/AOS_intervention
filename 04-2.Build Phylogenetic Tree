@@ -1,0 +1,25 @@
+Step 1. Carry out multiple sequence alignment using the Mafft algorithm.
+You can use --p-n-threads to speed up the process.
+
+qiime alignment mafft \
+--i-sequences rep-seqs.qza \
+--o-alignment mafft-aligned-rep-seqs.qza
+
+Step 2. Mask unconserved and highly gapped positions from an alignment.
+These positions are generally considered to add noise to a resulting phylogenetic tree.
+qiime alignment mask \
+--i-alignment mafft-aligned-rep-seqs.qza \
+--o-masked-alignment mafft-masked-aligned-rep-seqs.qza
+
+Step 3. Create the tree using the Fasttree algorithm.
+You can use --p-n-threads to speed up the process.
+
+qiime phylogeny fasttree \
+--i-alignment mafft-masked-aligned-rep-seqs.qza \
+--o-tree mafft-unrooted-tree.qza
+
+Step 4: Root the tree using the longest root.
+
+qiime phylogeny midpoint-root \
+    --i-tree mafft-unrooted-tree.qza \
+    --o-rooted-tree mafft-rooted-tree.qza

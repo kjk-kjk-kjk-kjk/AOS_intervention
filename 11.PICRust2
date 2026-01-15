@@ -1,0 +1,459 @@
+From the tutorial page:
+
+It assumes you have table.qza (feature table) and rep-seqs.qza (representative sequences). 
+note（ノート）
+
+It runs:
+
+qiime picrust2 full-pipeline \
+  --i-table table.qza \
+  --i-seq rep-seqs.qza \
+  --output-dir q2-picrust2_output \
+  --verbose
+
+
+This is a convenience wrapper that runs the PICRUSt2 steps (placement, hidden-state prediction, etc.). 
+note（ノート）
+
+It then suggests summarizing the outputs (pathway_abundance.qza, ec_metagenome.qza, ko_metagenome.qza) via:
+
+qiime feature-table summarize \
+  --i-table q2-picrust2_output/pathway_abundance.qza \
+  --o-visualization q2-picrust2_output/pathway_abundance.qzv
+
+
+And similarly for the ec_metagenome.qza and ko_metagenome.qza files. 
+note（ノート）
+
+Next, it runs a QIIME2 core metrics (diversity) analysis on pathway_abundance.qza:
+
+qiime diversity core-metrics \
+  --i-table q2-picrust2_output/pathway_abundance.qza \
+  --p-sampling-depth <some number> \
+  --m-metadata-file sample-metadata.txt \
+  --output-dir q2-picrust2_output/pathabun_core_metrics_out
+
+
+The tutorial suggests you pick the minimum feature count (i.e. the smallest number of counts across samples) from the pathway table to set as the sampling depth. 
+note（ノート）
+
+Then it shows commands to export the .qza results (like pathway_abundance.qza, ec_metagenome.qza, ko_metagenome.qza) to text/BIOM formats and convert to .tsv via biom convert. 
+note（ノート）
+
+
+# Install ANCOM-BC if you haven't yet
+if (!requireNamespace("ANCOMBC", quietly = TRUE)) {
+  install.packages("remotes")
+  remotes::install_github("FrederickHuangLin/ANCOMBC")
+}
+
+library(ANCOMBC)
+
+# Read your data
+raw_table <- read.delim("pathway_abundance.tsv", row.names = 1, check.names = FALSE)
+feature_table_t <- t(raw_table)  # samples as rows
+
+metadata <- read.delim("metadata.tsv", header = TRUE, stringsAsFactors = FALSE)
+rownames(metadata) <- metadata[[1]]
+metadata <- metadata[, -1, drop = FALSE]
+
+# Make sure rows match
+metadata <- metadata[rownames(feature_table_t), , drop = FALSE]
+
+# Run ANCOM-BC
+res <- ancombc(
+  feature_table_t,
+  metadata = metadata,
+  formula = "Group",
+  p_adj_method = "holm",
+  zero_cut = 0.90,       # filter taxa with >90% zeros
+  lib_cut = 1000,        # minimum library size
+  group = "Group",
+  struc_zero = TRUE,
+  neg_lb = TRUE,
+  tol = 1e-5,
+  max_iter = 100,
+  conserve = TRUE,
+  alpha = 0.05,
+  global = TRUE
+)
+
+# Extract results table
+res_df <- res$res$diff_abn
+
+# Save results
+write.csv(res_df, "ancombc_pathway_diff_abundance.csv")
+
+# Assuming:
+# feature_table: samples x taxa (relative abundance numeric matrix or data.frame)
+# metadata: with sample IDs and a column 'Timepoint' having values "Before" and "After"
+# Paired samples are in the same order in both "Before" and "After"
+
+# Example: reorder your data so samples are paired
+before_samples <- rownames(metadata)[metadata$Timepoint == "Before"]
+after_samples <- rownames(metadata)[metadata$Timepoint == "After"]
+
+# Make sure before_samples[i] corresponds to after_samples[i] (paired)
+# If not, reorder accordingly
+
+# Subset feature table by before/after
+feature_before <- feature_table[before_samples, ]
+feature_after <- feature_table[after_samples, ]
+
+# Check dimensions and order
+stopifnot(nrow(feature_before) == nrow(feature_after))
+
+# Initialize results dataframe
+results <- data.frame(
+  Taxon = colnames(feature_table),
+  p_value = NA,
+  direction = NA,
+  stringsAsFactors = FALSE
+)
+
+# Run paired Wilcoxon test per taxon
+for (i in seq_along(results$Taxon)) {
+  taxon <- results$Taxon[i]
+  
+  # Extract paired values
+  x_before <- feature_before[[taxon]]
+  x_after <- feature_after[[taxon]]
+  
+  # Perform paired Wilcoxon test
+  test <- wilcox.test(x_after, x_before, paired = TRUE)
+  results$p_value[i] <- test$p.value
+  
+  # Determine direction (median after - median before)
+  median_diff <- median(x_after - x_before)
+  results$direction[i] <- ifelse(median_diff > 0, "Increased", "Decreased")
+}
+
+# Adjust p-values for multiple testing (FDR)
+results$p_adj <- p.adjust(results$p_value, method = "BH")
+
+# Filter significant taxa
+significant_taxa <- results[results$p_adj < 0.05, ]
+
+# View significant taxa
+print(significant_taxa)
+
+# Optional: write to CSV
+write.csv(significant_taxa, "significant_taxa_wilcoxon.csv", row.names = FALSE)
+
+############################################################
+# Agarooligosaccharide (AOS) Intervention
+# KO differential analysis (PICRUSt2 output)
+# Includes fold-change + FDR tiers (<0.05 and <0.1)
+############################################################
+
+# --- Step 1: Install/load required packages ---
+required_packages <- c("tidyverse", "ggrepel", "ggpubr", "progress")
+for (pkg in required_packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install.packages(pkg, repos = "https://cloud.r-project.org")
+  }
+}
+
+library(tidyverse)
+library(ggrepel)
+library(ggpubr)
+library(progress)
+
+# --- Step 2: Load data files ---
+ko <- read.delim("ko-feature-table.biom.tsv", header = TRUE, sep = "\t", check.names = FALSE)
+meta <- read.delim("metadata_16S_adult.txt", header = TRUE, sep = "\t")
+
+# --- Step 3: Merge KO table with metadata ---
+merged <- merge(ko, meta, by = "SampleID")
+
+# --- Step 4: Split into before (Baseline) and after (AOS-4-weeks) ---
+baseline <- merged %>% filter(Group == "Baseline")
+aos <- merged %>% filter(Group == "AOS-4-weeks")
+
+# Check individuals match
+stopifnot(all(sort(unique(baseline$Individiual)) == sort(unique(aos$Individiual))))
+
+# --- Step 5: Paired Wilcoxon test for each KO ---
+ko_cols <- setdiff(colnames(ko), "SampleID")
+results <- data.frame(KO = ko_cols, W = NA, p = NA)
+
+pb <- progress_bar$new(
+  format = "  Testing KOs [:bar] :percent ETA: :eta",
+  total = length(ko_cols), clear = FALSE, width = 60
+)
+
+for (i in seq_along(ko_cols)) {
+  pb$tick()
+  ko_name <- ko_cols[i]
+  before <- baseline[match(aos$Individiual, baseline$Individiual), ko_name]
+  after  <- aos[, ko_name]
+  if (all(is.na(before)) || all(is.na(after)) || sd(c(before, after)) == 0) next
+  test <- wilcox.test(before, after, paired = TRUE, exact = FALSE)
+  results$W[i] <- test$statistic
+  results$p[i] <- test$p.value
+}
+
+cat("\n✅ Wilcoxon tests complete!\n")
+
+# --- Step 6: Adjust for multiple testing ---
+results$FDR <- p.adjust(results$p, method = "BH")
+
+# --- Step 7: Compute fold change ---
+fold_change <- sapply(ko_cols, function(x) {
+  mean(aos[[x]], na.rm = TRUE) / mean(baseline[[x]], na.rm = TRUE)
+})
+results$FoldChange <- fold_change
+results$log2FC <- log2(fold_change)
+
+# --- Step 8: Define tiers ---
+strict_sig <- results %>%
+  filter(FDR < 0.05 & (FoldChange >= 2 | FoldChange <= 0.5))
+suggestive_sig <- results %>%
+  filter(FDR >= 0.05 & FDR < 0.1 & (FoldChange >= 2 | FoldChange <= 0.5))
+p_only_sig <- results %>%
+  filter(p < 0.05 & (FoldChange >= 2 | FoldChange <= 0.5))
+
+cat("\nStrict FDR<0.05 hits:", nrow(strict_sig))
+cat("\nSuggestive FDR<0.1 hits:", nrow(suggestive_sig))
+cat("\nRaw p<0.05 hits (exploratory):", nrow(p_only_sig), "\n")
+
+# --- Step 9: Save results ---
+write.table(results, "all_KO_results.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
+write.table(strict_sig, "significant_KOs_FDR0.05_2fold.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
+write.table(suggestive_sig, "significant_KOs_FDR0.1_2fold.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
+write.table(p_only_sig, "significant_KOs_p0.05_2fold.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
+
+# --- Step 10: Volcano plot (label tiers) ---
+results$Significance <- "NS"
+results$Significance[results$FDR < 0.1 & results$FoldChange >= 2] <- "Up (FDR<0.1)"
+results$Significance[results$FDR < 0.1 & results$FoldChange <= 0.5] <- "Down (FDR<0.1)"
+
+volcano_plot <- ggplot(results, aes(x = log2FC, y = -log10(FDR), color = Significance)) +
+  geom_point(alpha = 0.6) +
+  scale_color_manual(values = c("Up (FDR<0.1)" = "red",
+                                "Down (FDR<0.1)" = "blue",
+                                "NS" = "grey70")) +
+  geom_vline(xintercept = c(-1, 1), linetype = "dotted") +
+  geom_hline(yintercept = -log10(0.1), linetype = "dotted", color = "orange") +
+  geom_text_repel(
+    data = results %>% filter(FDR < 0.1) %>% top_n(10, wt = -log10(FDR)),
+    aes(label = KO), size = 3
+  ) +
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "Differential KO abundance (≥2× fold change)",
+    subtitle = "Red = Upregulated (FDR<0.1), Blue = Downregulated (FDR<0.1)",
+    x = "log2 Fold Change (AOS / Baseline)",
+    y = "-log10(FDR)"
+  )
+
+ggsave("KO_volcano_plot_FDR0.1_2fold.png", volcano_plot, width = 8, height = 6)
+
+# --- Step 11: Done ---
+cat("\n✅ Analysis complete!\n")
+cat("Results saved as:\n",
+    " - all_KO_results.tsv\n",
+    " - significant_KOs_FDR0.05_2fold.tsv\n",
+    " - significant_KOs_FDR0.1_2fold.tsv\n",
+    " - significant_KOs_p0.05_2fold.tsv\n",
+    " - KO_volcano_plot_FDR0.1_2fold.png\n")
+
+browseURL(getwd())
+
+
+> library(readr)
+> library(dplyr)
+> library(ggplot2)
+> 
+> pathway_table <- read_tsv("~/Desktop/Healthy-adults-V3V4/q2-picrust2_output/pathabun_exported/pathabunｰfeature-table.biom.tsv", skip = 1)
+Rows: 369 Columns: 37                                                                                                                    
+── Column specification ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Delimiter: "\t"
+chr  (1): #OTU ID
+dbl (36): Ina-103-A, Ina-103-B, Ina-105-A, Ina-105-B, Ina-113-A, Ina-113-B, Ina-124-A, Ina-124-B, Ina-128-A, Ina-128-B, Ina-145-A, Ina-...
+
+ℹ Use `spec()` to retrieve the full column specification for this data.
+ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+> metadata <- read.table("~/Desktop/Healthy-adults-V3V4/metadata_16S_adult copy.txt", header = TRUE, sep = "\t", row.names = 1)
+> athway_long <- pathway_table %>%
++   tidyr::pivot_longer(-`#OTU ID`, names_to = "SampleID", values_to = "Abundance") %>%
++   left_join(metadata %>% tibble::rownames_to_column("SampleID"), by = "SampleID")
+> pathway_summary <- pathway_long %>%
++   group_by(Group, `#OTU ID`) %>%
++   summarise(mean_abundance = mean(Abundance), .groups = "drop")
+Error: object 'pathway_long' not found
+> 
+> pathway_long <- pathway_table %>%
++   tidyr::pivot_longer(-`#OTU ID`, names_to = "SampleID", values_to = "Abundance") %>%
++   left_join(metadata %>% tibble::rownames_to_column("SampleID"), by = "SampleID")
+> 
+> pathway_summary <- pathway_long %>%
++   group_by(Group, `#OTU ID`) %>%
++   summarise(mean_abundance = mean(Abundance), .groups = "drop")
+> top_pathways <- pathway_summary %>%
++   group_by(`#OTU ID`) %>%
++   summarise(total = sum(mean_abundance)) %>%
++   top_n(10, total) %>%
++   pull(`#OTU ID`)
+> 
+> ggplot(filter(pathway_summary, `#OTU ID` %in% top_pathways),
++        aes(x = Group, y = mean_abundance, fill = Group)) +
++   geom_bar(stat = "identity", position = "dodge") +
++   facet_wrap(~ `#OTU ID`, scales = "free_y") +
++   theme_bw() +
++   labs(title = "Top 10 Predicted Pathways (PICRUSt2)",
++        x = "Group", y = "Mean Predicted Abundance")
+> pathway_long <- pathway_table %>%
++   tidyr::pivot_longer(-`#OTU ID`, names_to = "SampleID", values_to = "Abundance") %>%
++   left_join(metadata %>% tibble::rownames_to_column("SampleID"), by = "SampleID")
+> pathway_long$Group <- factor(pathway_long$Group,
++                              levels = c("Baseline", "AOS-4-weeks"))
+> pathway_summary$Group <- factor(pathway_summary$Group,
++                                 levels = c("Baseline", "AOS-4-weeks"))
+> ggplot(filter(pathway_summary, `#OTU ID` %in% top_pathways),
++        aes(x = Group, y = mean_abundance, fill = Group)) +
++   geom_bar(stat = "identity", position = "dodge", color = "black") +  # adds border too
++   facet_wrap(~ `#OTU ID`, scales = "free_y") +
++   theme_bw(base_size = 12) +
++   labs(title = "Top 10 Predicted Pathways (PICRUSt2)",
++        x = "Group", y = "Mean Predicted Abundance")
+> ggplot(filter(pathway_summary, `#OTU ID` %in% top_pathways),
++        aes(x = Group, y = mean_abundance, fill = Group)) +
++   geom_bar(stat = "identity", position = "dodge", color = "black") +
++   facet_wrap(~ `#OTU ID`, scales = "free_y", ncol = 5) +  # fewer columns for better spacing
++   theme_bw(base_size = 12) +
++   labs(
++     title = "Top 10 Predicted Pathways (PICRUSt2)",
++     x = "Group",
++     y = "Mean Predicted Abundance"
++   ) +
++   theme(
++     strip.text = element_text(size = 8, face = "bold"),    # smaller pathway names
++     axis.text.x = element_text(size = 9, angle = 45, hjust = 1),  # tilt labels to prevent overlap
++     legend.position = "none",
++     plot.title = element_text(hjust = 0.5)
++   )
+> library(stringr)
+> pathway_summary$`#OTU ID` <- str_wrap(pathway_summary$`#OTU ID`, width = 30)
+> ggplot(filter(pathway_summary, `#OTU ID` %in% top_pathways),
++        aes(x = Group, y = mean_abundance, fill = Group)) +
++   geom_bar(stat = "identity", position = "dodge", color = "black") +
++   facet_wrap(~ `#OTU ID`, scales = "free_y", ncol = 5) +  # fewer columns for better spacing
++   theme_bw(base_size = 12) +
++   labs(
++     title = "Top 10 Predicted Pathways (PICRUSt2)",
++     x = "Group",
++     y = "Mean Predicted Abundance"
++   ) +
++   theme(
++     strip.text = element_text(size = 8, face = "bold"),    # smaller pathway names
++     axis.text.x = element_text(size = 9, angle = 45, hjust = 1),  # tilt labels to prevent overlap
++     legend.position = "none",
++     plot.title = element_text(hjust = 0.5)
++   )
+> library(stringr)
+> pathway_summary$`#OTU ID` <- str_wrap(pathway_summary$`#OTU ID`, width = 30)
+> ggplot(filter(pathway_summary, `#OTU ID` %in% top_pathways),
++        aes(x = Group, y = mean_abundance, fill = Group)) +
++   geom_bar(stat = "identity", position = "dodge", color = "black") +
++   facet_wrap(~ `#OTU ID`, scales = "free_y", ncol = 5) +  # fewer columns for better spacing
++   theme_bw(base_size = 12) +
++   labs(
++     title = "Top 10 Predicted Pathways (PICRUSt2)",
++     x = "Group",
++     y = "Mean Predicted Abundance"
++   ) +
++   theme(
++     strip.text = element_text(size = 8, face = "bold"),    # smaller pathway names
++     axis.text.x = element_text(size = 9, angle = 45, hjust = 1),  # tilt labels to prevent overlap
++     legend.position = "none",
++     plot.title = element_text(hjust = 0.5)
++   )
+> ggsave(
++   filename = "picrust2_top10_pathways.png",  # output file name
++   plot = last_plot(),                        # saves the most recent plot
++   width = 14,                                # wider for readability
++   height = 8,
++   dpi = 600                                  # high resolution (good for publication)
++ )
+> wilcox.test(Abundance ~ Group, data = subset(pathway_long, `#OTU ID` == "GLYCOCAT-PWY"))
+
+	Wilcoxon rank sum exact test
+
+data:  Abundance by Group
+W = 213, p-value = 0.1108
+alternative hypothesis: true location shift is not equal to 0
+
+> wilcox.test(Abundance ~ Group, data = subset(pathway_long, `#OTU ID` == "ILEUSYN-PWY"))
+
+	Wilcoxon rank sum exact test
+
+data:  Abundance by Group
+W = 213, p-value = 0.1108
+alternative hypothesis: true location shift is not equal to 0
+
+> wilcox.test(Abundance ~ Group, data = subset(pathway_long, `#OTU ID` == "NONOXIPENT-PWY"))
+
+	Wilcoxon rank sum exact test
+
+data:  Abundance by Group
+W = 201, p-value = 0.2262
+alternative hypothesis: true location shift is not equal to 0
+
+> wilcox.test(Abundance ~ Group, data = subset(pathway_long, `#OTU ID` == "PWY-5101"))
+
+	Wilcoxon rank sum exact test
+
+data:  Abundance by Group
+W = 209, p-value = 0.1427
+alternative hypothesis: true location shift is not equal to 0
+
+> wilcox.test(Abundance ~ Group, data = subset(pathway_long, `#OTU ID` == "PWY-6737"))
+
+	Wilcoxon rank sum exact test
+
+data:  Abundance by Group
+W = 216, p-value = 0.09071
+alternative hypothesis: true location shift is not equal to 0
+
+> wilcox.test(Abundance ~ Group, data = subset(pathway_long, `#OTU ID` == "PWY-7111"))
+
+	Wilcoxon rank sum exact test
+
+data:  Abundance by Group
+W = 200, p-value = 0.2387
+alternative hypothesis: true location shift is not equal to 0
+
+> wilcox.test(Abundance ~ Group, data = subset(pathway_long, `#OTU ID` == "PWY-7220"))
+
+	Wilcoxon rank sum exact test
+
+data:  Abundance by Group
+W = 196, p-value = 0.2931
+alternative hypothesis: true location shift is not equal to 0
+
+> wilcox.test(Abundance ~ Group, data = subset(pathway_long, `#OTU ID` == "PWY-7222"))
+
+	Wilcoxon rank sum exact test
+
+data:  Abundance by Group
+W = 196, p-value = 0.2931
+alternative hypothesis: true location shift is not equal to 0
+
+> wilcox.test(Abundance ~ Group, data = subset(pathway_long, `#OTU ID` == "PWY-7663"))
+
+	Wilcoxon rank sum exact test
+
+data:  Abundance by Group
+W = 210, p-value = 0.1341
+alternative hypothesis: true location shift is not equal to 0
+
+> wilcox.test(Abundance ~ Group, data = subset(pathway_long, `#OTU ID` == "VALSYN-PWY"))
+
+	Wilcoxon rank sum exact test
+
+data:  Abundance by Group
+W = 213, p-value = 0.1108
+alternative hypothesis: true location shift is not equal to 0
+
+> 

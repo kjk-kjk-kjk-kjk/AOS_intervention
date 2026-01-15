@@ -1,0 +1,284 @@
+qiime cutadapt demux-paired \
+  --i-seqs demux-paired-seqs.qza \
+  --m-barcodes-file metadata_16s_adult.txt \
+  --m-barcodes-column COLUMN \
+  --p-error-rate 0 \
+  --o-per-sample-sequences demultiplexed-seqs.qza \
+  --o-untrimmed-sequences untrimmed.qza \
+  --verbose
+
+#Extracting V4 region from V3-V4 region
+qiime cutadapt trim-paired \
+--i-demultiplexed-sequences demux-paired-end.qza \
+--p-front-f GTGCCAGCMGCCGCGGTAA \
+--p-front-r GGACTACHVGGGTWTCTAAT \
+--p-discard-untrimmed \
+--o-trimmed-sequences trimmed-demux-paired-end.qza \
+--verbose
+
+qiime rescript evaluate-fit-classifier \
+--i-sequences /Users/t6/Desktop/Healthy-adult-v3v4/classifier-training/silva-138-99-seqs.qza  \
+--i-taxonomy /Users/t6/Desktop/Healthy-adult-v3v4/classifier-training/silva-138-99-tax.qza  \
+--o-classifier silva-v3v4.qza \
+--o-evaluation evaluation.qzv \
+--o-observed-taxonomy taxonomy-evaluate.qza
+
+
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+
+# 1. Load Shannon diversity data
+shannon <- read.delim("~/Desktop/Healthy-adults-V3V4/sampling-depth-58000/shannon_vector_results/alpha-diveristy-shannonvector.tsv", comment.char = "#")
+colnames(shannon)[1] <- "SampleID"
+
+# 2. Load metadata
+ metadata <- read.delim("~/Desktop/Healthy-adults-V3V4/sampling-depth-58000/shannon_vector_results/metadata_16S_adult.txt", header = TRUE)
+
+SampleID	SampleName	Group	Individual
+Ina-103-B	103-B	Baseline	Ina-103
+Ina-105-B	105-B	Baseline	Ina-105
+Ina-113-B	113-B	Baseline	Ina-113
+Ina-124-B	124-B	Baseline	Ina-124
+Ina-128-B	128-B	Baseline	Ina-128
+Ina-145-B	145-B	Baseline	Ina-145
+Ina-148-B	148-B	Baseline	Ina-148
+Ina-150-B	150-B	Baseline	Ina-150
+
+# 3. Merge on sample-id
+merged <- merge(shannon, metadata, by = "SampleID")
+
+# 📝 Replace with your actual group column (e.g., Treatment, Group, Condition)
+group_col <- "Group"
+# Define your desired order here:
+desired_order <- c("Control", "Treatment A", "Treatment B")
+
+# Apply it to the column
+merged[[group_col]] <- factor(merged[[group_col]], levels = desired_order)
+
+# 4. Perform Kruskal-Wallis test
+formula <- as.formula(paste("Shannon ~", group_col))
+kruskal_result <- kruskal.test(formula, data = merged)
+
+# 5. Prepare annotation text
+p_val <- kruskal_result$p.value
+annotation_label <- ifelse(p_val > 0.05, "n.s.", paste0("p = ", signif(p_val, 3)))
+
+# Assign your plot to a variable
+p <- ggplot(merged, aes_string(x = group_col, y = "Shannon", fill = group_col)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.6) +
+  geom_jitter(width = 0.15, alpha = 0.6, color = "black") +
+  theme_minimal() +
+  labs(
+    title = "Shannon Diversity Before and After AOS Intervention",
+    y = "Shannon Diversity Index",
+    x = NULL
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  annotate("text",
+           x = 1.5, 
+           y = max(merged$Shannon, na.rm = TRUE) + 0.2,
+           label = annotation_label,
+           size = 5)
+
+# Save the plot as PNG
+ggsave("shannon_diversity.png", plot = p, width = 6, height = 4, dpi = 300)
+
+# 7. Print the test result in console
+print(kruskal_result)
+
+-------------------------------------------------------------------------------------------------------
+# Load Chao1 data
+chao1 <- read.delim("~/Desktop/Healthy-adults-V3V4/sampling-depth-58000/chao1_vector_results/alpha-diversity-chao1.tsv", comment.char = "#")
+colnames(chao1)[1] <- "SampleID"
+colnames(chao1)[2] <- "chao1"
+
+# Merge with metadata
+merged_chao1 <- merge(chao1, metadata, by = "SampleID")
+
+# Set the same group order
+merged_chao1[[group_col]] <- factor(merged_chao1[[group_col]], levels = desired_order)
+
+# Kruskal-Wallis test
+kruskal_result_chao1 <- kruskal.test(as.formula(paste("Chao1 ~", group_col)), data = merged_chao1)
+p_val_chao1 <- kruskal_result_chao1$p.value
+annotation_label_chao1 <- ifelse(p_val_chao1 > 0.05, "n.s.", paste0("p = ", signif(p_val_chao1, 3)))
+
+# Plot Chao1 with same style
+p_chao1 <- ggplot(merged_chao1, aes_string(x = group_col, y = "chao1", fill = group_col)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.6) +
+  geom_jitter(width = 0.15, alpha = 0.6, color = "black") +
+  theme_minimal() +
+  labs(
+    title = "Chao1 Richness Before and After AOS Intervention",
+    y = "Chao1 Richness Index",
+    x = NULL
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  annotate("text",
+           x = 1.5, 
+           y = max(merged_chao1$chao1, na.rm = TRUE) + 5,  # Adjust as needed
+           label = annotation_label_chao1,
+           size = 5)
+
+# Print the plot
+print(p_chao1)
+
+# Optionally save it
+ggsave("chao1_richness.png", plot = p_chao1, width = 6, height = 4, dpi = 300)
+
+# Print the test result
+print(kruskal_result_chao1)
+
+--------------------------------------------------------------------------------------------------------
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+
+# 1. Load Faith PD data
+faith_pd <- read.delim("~/Desktop/Healthy-adults-V3V4/sampling-depth-58000/faith_pd_vector_results/alpha-diveristy-faithpdvector.tsv", comment.char = "#")
+colnames(faith_pd)[1] <- "SampleID"  # Make sure the ID column is named consistently
+
+# OPTIONAL: Check column names
+# print(colnames(faith_pd))
+
+# Rename the Faith PD column if necessary (adjust as per actual column name)
+colnames(faith_pd)[colnames(faith_pd) == "your_column_here"] <- "FaithPD"  # Change "your_column_here"
+
+# 2. Load metadata
+metadata <- read.delim("~/Desktop/Healthy-adults-V3V4/sampling-depth-58000/shannon_vector_results/metadata_16S_adult.txt", header = TRUE)
+
+# 3. Merge on SampleID
+merged_faith <- merge(faith_pd, metadata, by = "SampleID")
+
+# 4. Define group column and desired order
+group_col <- "Group"
+desired_order <- c("Baseline", "Post-AOS", "Follow-up")  # <- Change to your actual group levels
+merged_faith[[group_col]] <- factor(merged_faith[[group_col]], levels = desired_order)
+
+# 5. Kruskal-Wallis test
+formula_faith <- as.formula(paste("FaithPD ~", group_col))
+kruskal_result_faith <- kruskal.test(formula_faith, data = merged_faith)
+
+# 6. Prepare annotation text
+p_val_faith <- kruskal_result_faith$p.value
+annotation_label_faith <- ifelse(p_val_faith > 0.05, "n.s.", paste0("p = ", signif(p_val_faith, 3)))
+
+# 7. Plot
+x_pos <- median(1:length(desired_order))
+y_pos <- max(merged_faith$FaithPD, na.rm = TRUE) + 1  # Adjust if needed
+
+p_faith <- ggplot(merged_faith, aes_string(x = group_col, y = "FaithPD", fill = group_col)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.6) +
+  geom_jitter(width = 0.15, alpha = 0.6, color = "black") +
+  theme_minimal() +
+  labs(
+    title = "Faith's Phylogenetic Diversity Before and After AOS Intervention",
+    y = "Faith PD",
+    x = NULL
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  annotate("text",
+           x = x_pos,
+           y = y_pos,
+           label = annotation_label_faith,
+           size = 5)
+
+# 8. Save plot
+ggsave("faith_pd_diversity.png", plot = p_faith, width = 6, height = 4, dpi = 300)
+
+# 9. Print Kruskal-Wallis result
+print(kruskal_result_faith)
+
+# ------------------------------
+# Microbiome Phylum Barplot Script
+# ------------------------------
+
+# Load libraries
+library(tidyverse)
+library(viridis)  # for better color palette (optional)
+
+# ------------------------------
+# 1. Read your data
+# ------------------------------
+
+# Tab-delimited abundance table (rows = samples, columns = phyla)
+abund <- read.delim("abundance_table.csv", check.names = FALSE)
+
+# Tab-delimited metadata
+meta  <- read.delim("metadata.csv", check.names = FALSE)
+
+# ------------------------------
+# 2. Pivot abundance table to long format
+# ------------------------------
+abund_long <- abund %>%
+  pivot_longer(
+    cols = -SampleID,
+    names_to = "Phylum",
+    values_to = "Abundance"
+  )
+
+# ------------------------------
+# 3. Merge with metadata
+# ------------------------------
+merged <- abund_long %>%
+  left_join(meta, by = "SampleID")
+
+# ------------------------------
+# 4. Calculate relative abundance per sample
+# ------------------------------
+merged <- merged %>%
+  group_by(SampleID) %>%
+  mutate(RelativeAbundance = Abundance / sum(Abundance)) %>%
+  ungroup()
+
+# ------------------------------
+# 5. Calculate mean relative abundance per group
+# ------------------------------
+grouped <- merged %>%
+  group_by(Group, Phylum) %>%
+  summarise(mean_abundance = mean(RelativeAbundance, na.rm = TRUE)) %>%
+  ungroup() %>%
+  filter(mean_abundance > 0)  # optional: remove zero-abundance phyla
+
+# ------------------------------
+# 6. Set order of groups (Baseline first)
+# ------------------------------
+grouped$Group <- factor(grouped$Group, levels = c("Baseline", "AOS-4-weeks"))
+
+# ------------------------------
+# 7. Plot the barplot
+# ------------------------------
+p <- ggplot(grouped, aes(x = Group, y = mean_abundance, fill = Phylum)) +
+  geom_bar(stat = "identity", color = "black", width = 0.4) +  # slim bars + outlines
+  scale_fill_viridis_d(option = "turbo") +                     # good color palette
+  labs(
+    x = "Group",
+    y = "Mean relative abundance",
+    fill = "Phylum",
+    title = "Average Phylum Composition per Group"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "right"
+  )
+
+# Display the plot
+print(p)
+
+# ------------------------------
+# 8. Save the plot as PNG
+# ------------------------------
+ggsave("phylum_barplot.png", plot = p, width = 10, height = 6, dpi = 300)
