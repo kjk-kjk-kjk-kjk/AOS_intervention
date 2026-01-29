@@ -54,28 +54,28 @@ qiime diversity alpha \
 #各種α多様性指数とメタデータの関連解析
 qiime diversity alpha-group-significance \
 --i-alpha-diversity observed_features_vector.qza \
---m-metadata-file ../../metadata_16S.txt \#directoryを書く
+--m-metadata-file ../metadata_16S_adult.txt \
 --o-visualization observed_features-group-significance.qzv
 
 qiime diversity alpha-group-significance \
 --i-alpha-diversity chao1_vector.qza \
---m-metadata-file ~/Downloads/gut-microbiome-analysis/metadata_16S.txt \
+--m-metadata-file ../metadata_16S_adult.txt \
 --o-visualization chao1-group-significance.qzv
 
 
 qiime diversity alpha-group-significance \
 --i-alpha-diversity shannon_vector.qza \
---m-metadata-file ~/Downloads/gut-microbiome-analysis/metadata_16S.txt \
+--m-metadata-file ../metadata_16S_adult.txt \
 --o-visualization shannon-group-significance.qzv
 
 qiime diversity alpha-group-significance \
 --i-alpha-diversity faith_pd_vector.qza \
---m-metadata-file ~/Downloads/gut-microbiome-analysis/metadata_16S.txt \
+--m-metadata-file ../metadata_16S_adult.txt \
 --o-visualization faith-pd-group-significance.qzv
 
 qiime diversity alpha-group-significance \
 --i-alpha-diversity evenness_vector.qza \
---m-metadata-file ../../metadata_16S_adult.txt \
+--m-metadata-file ../metadata_16S_adult.txt \
 --o-visualization evenness-group-significance.qzv 
 
 
@@ -84,14 +84,14 @@ while weighted UniFrac takes into account the relative abundance of shared taxa
 
 qiime diversity beta-group-significance \
 --i-distance-matrix weighted_unifrac_distance_matrix.qza \
---m-metadata-file ../../metadata_16S_adult.txt \
+--m-metadata-file ../metadata_16S_adult.txt \
 --m-metadata-column Group \
 --o-visualization weighted-unifrac-group-significance.qzv \
 --p-pairwise
 
 qiime diversity beta-group-significance \
 --i-distance-matrix unweighted_unifrac_distance_matrix.qza \
---m-metadata-file ../../metadata_16S_adult.txt \
+--m-metadata-file ../metadata_16S_adult.txt \
 --m-metadata-column Group \
 --o-visualization unweighted-unifrac-group-significance.qzv \
 --p-pairwise
