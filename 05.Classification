@@ -12,8 +12,9 @@ qiime feature-classifier classify-sklearn \
 output ARTIFACT: FeatureData[Taxonomy]
 
 qiime metadata tabulate \
---m-input-file trialtrained-taxonomy.qza \
+--m-input-file rep-seqs-taxonomy.qza \
 --o-visualization rep-seqs-taxonomy.qzv
+
 
 qiime taxa barplot \
 --i-table /Users/shirai/Desktop/gut-microbiota-analysis/250819_healthy-adult_qiime2-2024.5/table.qza \
