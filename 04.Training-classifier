@@ -25,8 +25,3 @@ qiime feature-classifier classify-sklearn \
 qiime metadata tabulate \
   --m-input-file silva-138-99-tax.qza \
   --o-visualization silva-138-99-tax.qzv
-
-qiime rescript filter-taxa \
-  --i-taxonomy taxonomy.qza \
-  --m-ids-to-keep-file trimmed-sequences.qza \
-  --o-filtered-taxonomy filtered-taxonomy.qza
