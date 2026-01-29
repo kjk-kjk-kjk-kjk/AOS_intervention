@@ -7,6 +7,8 @@ qiime feature-classifier classify-sklearn \
 --i-classifier TaxonomicClassifier \
 --o-classification rep-seqs-taxonomy.qza
 
+#enter "silva-138-v3v4-tax.qza (example)" instead of "TaxonomicClassifier"
+
 output ARTIFACT: FeatureData[Taxonomy]
 
 qiime metadata tabulate \
