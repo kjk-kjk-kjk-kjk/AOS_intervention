@@ -36,9 +36,9 @@ while excluding as few samples as possible.
 
 qiime diversity core-metrics-phylogenetic \
   --i-phylogeny rooted-tree.qza \
-  --i-table ../table.qza \
+  --i-table table.qza \
   --p-sampling-depth 57962 (table.qzv lowest read-frequency) \
-  --m-metadata-file ../metadata_16S_adult.txt \
+  --m-metadata-file metadata_16S_adult.txt \
   --output-dir core-metrics-results
 
 #Chao1を計算
