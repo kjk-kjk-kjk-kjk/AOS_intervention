@@ -41,6 +41,10 @@ qiime diversity core-metrics-phylogenetic \
   --m-metadata-file metadata_16S_adult.txt \
   --output-dir core-metrics-results
 
+#core-metrics-resultsのdirectoryに移動する
+cd ⭕️
+
+
 #Chao1を計算
 qiime diversity alpha \
 --i-table rarefied_table.qza \
