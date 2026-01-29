@@ -29,8 +29,8 @@ Collapse groups of features that have the same taxonomic assignment through
 
 for i in {2..7}; do \
 qiime taxa collapse \
---i-table ../table.qza \
---i-taxonomy stooltrained-taxonomy.qza \
+--i-table table.qza \
+--i-taxonomy rep-seqs-taxonomy.qza \
 --p-level $i \
 --o-collapsed-table rel-freqs-class-${i}.qza \
 ;done
