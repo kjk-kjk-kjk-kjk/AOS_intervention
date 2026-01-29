@@ -25,7 +25,7 @@ qiime dada2 denoise-paired \
 
 Expected Output Artifacts:
 1. FeatureTable[Frequency] table.qza
-2. FeatureData[Sequence] rep-seqs.gza
+2. FeatureData[Sequence] rep-seqs.qza
 3. SampleData[Dada2Stats] denoising-stats.qza
 
 #Each artifacts summaries generation
