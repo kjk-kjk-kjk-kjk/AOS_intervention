@@ -17,9 +17,9 @@ qiime metadata tabulate \
 
 
 qiime taxa barplot \
---i-table /Users/shirai/Desktop/gut-microbiota-analysis/250819_healthy-adult_qiime2-2024.5/table.qza \
+--i-table table.qza \
 --i-taxonomy rep-seqs-taxonomy.qza \
---m-metadata-file /Users/shirai/Desktop/gut-microbiota-analysis/250819_healthy-adult_qiime2-2024.5/metadata_16S_adult.txt \
+--m-metadata-file metadata_16S_adult.txt \
 --o-visualization rep-seqs-taxa-bar-plots.qzv
 
 #Relative-abundance
